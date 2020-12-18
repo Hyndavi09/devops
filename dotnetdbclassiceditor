@@ -1,0 +1,6 @@
+1:Ms build
+2:Publish Artifact:dacpac
+3:dotnet restore
+4:dotnet build
+5:dotnet publish
+6:Publish Artifact: drop
