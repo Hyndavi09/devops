@@ -1,0 +1,62 @@
+# Maven
+# Build your Java project and run tests with Apache Maven.
+# Add steps that analyze code, save build artifacts, deploy, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/java
+
+trigger:
+- main
+
+stages:
+  - stage: 
+    displayName: Build stage
+    jobs:
+      - job: BuildApp
+        displayName: Build application code
+        pool:
+          vmImage: windows-latest
+        steps:
+        - task: Maven@3
+          inputs:
+            mavenPomFile: 'project_code/pom.xml'
+            publishJUnitResults: true
+            testResultsFiles: '**/surefire-reports/TEST-*.xml'
+            javaHomeOption: 'JDKVersion'
+            jdkVersionOption: '1.8'
+            mavenVersionOption: 'Default'
+            mavenOptions: '-Xmx3072m'
+            mavenAuthenticateFeed: false
+            effectivePomSkip: false
+            sonarQubeRunAnalysis: false
+        
+        - task: CmdLine@2
+          inputs:
+            script: 'mv $(System.DefaultWorkingDirectory)/project_code/target/*.war $(System.DefaultWorkingDirectory)/project_code/target/ROOT.war'
+        - task: CopyFiles@2
+          inputs:
+            SourceFolder: '$(system.defaultworkingdirectory)'
+            Contents: '**/*.war'
+            TargetFolder: '$(build.artifactstagingdirectory)'
+
+        - task: PublishBuildArtifacts@1
+          inputs:
+            PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+            ArtifactName: 'Warfile'
+  - stage: deployment
+    displayName: 'Deploy to prod'
+    jobs:
+      - deployment: Production
+        pool: 
+          vmImage: windows-latest
+        environment: 'Production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureRmWebAppDeployment@4
+                  inputs:
+                    ConnectionType: 'AzureRM'
+                    azureSubscription: 'hyndu'
+                    appType: 'webAppLinux'
+                    WebAppName: 'javaDB'
+                    packageForLinux: '$(Pipeline.Workspace)/**/*.war'
+                    RuntimeStack: 'TOMCAT|8.5-jre8'
