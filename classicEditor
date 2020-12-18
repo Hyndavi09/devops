@@ -1,0 +1,4 @@
+1:Maven
+2:Bash Script
+3:Copy Files to: $(build.artifactstagingdirectory)
+4:Publish Artifact: drop
