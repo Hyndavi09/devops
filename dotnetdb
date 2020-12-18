@@ -1,0 +1,110 @@
+# ASP.NET Core (.NET Framework)
+# Build and test ASP.NET Core projects targeting the full .NET Framework.
+# Add steps that publish symbols, save build artifacts, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/dotnet-core
+
+trigger:
+- main
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+stages:
+- stage:
+  displayName: Build stage
+  jobs:
+  - job : sql
+    displayName: sql build
+    pool: 
+     vmImage: windows-latest 
+    steps:
+     - task: MSBuild@1
+       inputs:
+         solution: 'sampledb/Database1/Database1.sqlproj'
+         msbuildArguments: '/p:OutDir=$(Build.ArtifactStagingDirectory)'
+     - task: PublishBuildArtifacts@1
+       inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'dacpac'
+        publishLocation: 'Container'
+
+  - job : webapp
+    displayName: webapp build
+    pool: 
+     vmImage: windows-latest 
+    steps :
+     - task: DotNetCoreCLI@2
+       inputs:
+         command: 'restore'
+         feedsToUse: 'select'
+     - task: DotNetCoreCLI@2
+       inputs:
+         command: 'build'
+         projects: '**/*.csproj'
+     - task: DotNetCoreCLI@2
+       inputs:
+         command: 'publish'
+         publishWebProjects: true
+         arguments: '--configuration $(buildConfiguration) --output $(build.artifactstagingdirectory)'
+     - task: PublishBuildArtifacts@1
+       inputs:
+         PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+         ArtifactName: 'drop'
+         publishLocation: 'Container'
+
+- stage: deployment
+  displayName: 'Deploy to production'
+  jobs:
+  - deployment: Production
+    pool: 
+      vmImage: windows-latest
+    environment: 'Production'
+    strategy:
+       runOnce:
+         deploy:
+           steps:
+            - task: SqlAzureDacpacDeployment@1
+              inputs:
+               azureSubscription: 'Free Trial (60584be9-98a4-4707-be50-badf2b4fb922)'
+               AuthenticationType: 'server'
+               ServerName: 'hynduserver.database.windows.net'
+               DatabaseName: 'dbdotnethyndu'
+               SqlUsername: 'hyndavi'
+               SqlPassword: 'devops@12'
+               deployType: 'DacpacTask'
+               DeploymentAction: 'Publish'
+               DacpacFile: '$(Pipeline.Workspace)/**/*.dacpac'
+               IpDetectionMethod: 'AutoDetect'
+            - task: AzureRmWebAppDeployment@4
+              inputs:
+                ConnectionType: 'AzureRM'
+                azureSubscription: 'Free Trial (60584be9-98a4-4707-be50-badf2b4fb922)'
+                appType: 'webApp'
+                WebAppName: 'hynduDBdotnetyaml'
+                packageForLinux: '$(Pipeline.Workspace)/**/*.zip'
+            - task: AzureAppServiceSettings@1
+              inputs:
+                azureSubscription: 'Free Trial (60584be9-98a4-4707-be50-badf2b4fb922)'
+                appName: 'hynduDBdotnetyaml'
+                resourceGroupName: 'hyndu'
+                connectionStrings: |
+                  [
+                                    {
+                                      "name": "CatalogConnection",
+                                      "value": "Server=tcp:hynduserver.database.windows.net,1433;Initial Catalog=dbdotnethyndu;Persist Security Info=False;User ID=hyndavi;Password=devops@12;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;",
+                                      "type": "SQLServer",
+                                      "slotSetting": false
+                  
+                                    },
+                                    {
+                                      "name": "IdentityConnection",
+                                      "value": "Server=tcp:hynduserver.database.windows.net,1433;Initial Catalog=dbdotnethyndu;Persist Security Info=False;User ID=hyndavi;Password=devops@12;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;",
+                                      "type": "SQLServer",
+                                      "slotSetting": false
+                  
+                                    }
+                                  ]
